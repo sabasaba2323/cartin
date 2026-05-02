@@ -399,7 +399,9 @@
   });
 
   openBtn.addEventListener('click', () => {
-    window.open(urlEl.textContent, '_blank');
+    // window.open() だとReferer情報の問題でMellojoy側にカート追加が反映されない
+    // 同じタブで遷移する方式に変更（戻るボタンでツール画面に戻れる）
+    window.location.href = urlEl.textContent;
   });
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
