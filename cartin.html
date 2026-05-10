@@ -47,6 +47,18 @@
   .options-row { display: flex; gap: 12px; margin-bottom: 0.5rem; font-size: 11px; color: #666; flex-wrap: wrap; align-items: center; }
   .options-row label { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; }
   .options-row input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+  .options-row input[type="number"] {
+    width: 48px; height: 26px; padding: 2px 6px;
+    font-size: 12px; text-align: center;
+    border: 0.5px solid rgba(0,0,0,0.2); border-radius: 4px;
+    background: #fff;
+    -moz-appearance: textfield;
+    cursor: text;
+  }
+  .options-row input[type="number"]::-webkit-outer-spin-button,
+  .options-row input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
   #action-feedback { margin-left: auto; font-size: 11px; color: #1d9e75; min-height: 14px; }
 
   .tabs { display: flex; gap: 2px; margin-bottom: 0.5rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); }
@@ -91,6 +103,7 @@
     .url-bar button { font-size: 11px; padding: 0 8px; height: 32px; }
     .tab-btn { font-size: 12px; padding: 8px 6px; }
     .options-row { font-size: 11px; gap: 10px; }
+    .options-row input[type="number"] { width: 44px; height: 28px; font-size: 13px; }
     .row { gap: 5px; padding: 8px 4px; }
     .row .toggle { width: 22px; height: 22px; }
     .row .name { font-size: 14px; }
@@ -120,6 +133,7 @@
 </div>
 
 <div class="options-row">
+  <label>初期数量: <input type="number" id="default-qty" min="1" max="99" value="1" /></label>
   <label><input type="checkbox" id="hide-soldout"> 売切を非表示</label>
   <label><input type="checkbox" id="show-fullname"> 商品名を全表示</label>
   <span id="action-feedback"></span>
@@ -142,6 +156,7 @@
     { handle: 'mellojoy', tag: 'blind', label: 'ブラインド' },
     { handle: 'mellojoy-\u5355\u54C1', tag: 'single', label: '単品' }
   ];
+  const DEFAULT_QTY_KEY = 'mellojoy_cartin_default_qty_v1';
 
   const NOISE_KEYWORDS = [
     'キャンセル',
@@ -169,6 +184,20 @@
   let products = [];
   let selected = new Map();
   let currentTab = 'all';
+  let defaultQty = 1;
+
+  function loadDefaultQty() {
+    try {
+      const q = parseInt(localStorage.getItem(DEFAULT_QTY_KEY));
+      defaultQty = (q >= 1 && q <= 99) ? q : 1;
+    } catch (e) { defaultQty = 1; }
+  }
+
+  function saveDefaultQty() {
+    try {
+      localStorage.setItem(DEFAULT_QTY_KEY, String(defaultQty));
+    } catch (e) {}
+  }
 
   const statusEl = document.getElementById('status');
   const listEl = document.getElementById('product-list');
@@ -179,6 +208,7 @@
   const feedbackEl = document.getElementById('action-feedback');
   const hideSoldout = document.getElementById('hide-soldout');
   const showFullname = document.getElementById('show-fullname');
+  const defaultQtyInput = document.getElementById('default-qty');
 
   async function fetchCollection(handle) {
     const encoded = encodeURI(handle);
@@ -272,7 +302,7 @@
       const variantLabel = r.showVariantLabel
         ? `<div class="variant-label">${escapeHtml(r.variantTitle)}</div>`
         : '';
-      const qty = sel ? sel.qty : 1;
+      const qty = sel ? sel.qty : defaultQty;
 
       return `
         <div class="${rowClass}" data-vid="${r.variantId}">
@@ -390,11 +420,35 @@
   }
 
   copyBtn.addEventListener('click', async () => {
+    const text = urlEl.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        flashFeedback('コピー済');
+        return;
+      } catch (e) {
+        console.error('Clipboard API失敗:', e);
+      }
+    }
     try {
-      await navigator.clipboard.writeText(urlEl.textContent);
-      flashFeedback('コピー済');
-    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '-9999px';
+      ta.setAttribute('readonly', '');
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        flashFeedback('コピー済');
+        return;
+      }
       flashFeedback('コピー失敗', true);
+    } catch (e) {
+      flashFeedback(`コピー失敗: ${e.message || e}`, true);
     }
   });
 
@@ -417,6 +471,16 @@
   hideSoldout.addEventListener('change', render);
   showFullname.addEventListener('change', render);
 
+  defaultQtyInput.addEventListener('input', e => {
+    let v = parseInt(e.target.value);
+    if (isNaN(v) || v < 1) v = 1;
+    if (v > 99) v = 99;
+    defaultQty = v;
+    saveDefaultQty();
+    // 未チェック行の表示数量を更新するため再描画
+    render();
+  });
+
   document.getElementById('reload-btn').addEventListener('click', loadAll);
   document.getElementById('clear-btn').addEventListener('click', () => {
     selected.clear();
@@ -424,6 +488,9 @@
     updateUrl();
   });
 
+  // 初期化
+  loadDefaultQty();
+  defaultQtyInput.value = defaultQty;
   loadAll();
 })();
 </script>
